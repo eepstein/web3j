@@ -3,6 +3,7 @@ package org.web3j.crypto;
 import java.math.BigInteger;
 import java.security.SignatureException;
 import java.util.Arrays;
+import java.util.Optional;
 
 import org.bouncycastle.asn1.x9.X9ECParameters;
 import org.bouncycastle.asn1.x9.X9IntegerConverter;
@@ -36,9 +37,17 @@ public class Sign {
     static final BigInteger HALF_CURVE_ORDER = CURVE_PARAMS.getN().shiftRight(1);
 
     public static SignatureData signMessage(byte[] message, ECKeyPair keyPair) {
-        BigInteger publicKey = keyPair.getPublicKey();
+        return signMessage(message, keyPair, true);
+    }
 
-        byte[] messageHash = Hash.sha3(message);
+    public static SignatureData signMessage(byte[] message, ECKeyPair keyPair, boolean needToHash) {
+        BigInteger publicKey = keyPair.getPublicKey();
+        byte[] messageHash;
+        if (needToHash) {
+            messageHash = Hash.sha3(message);
+        } else {
+            messageHash = message;
+        }
 
         ECDSASignature sig = keyPair.sign(messageHash);
         // Now we have to work backwards to figure out the recId needed to recover the signature.
@@ -87,7 +96,7 @@ public class Sign {
      * @param message Hash of the data that was signed.
      * @return An ECKey containing only the public part, or null if recovery wasn't possible.
      */
-    private static BigInteger recoverFromSignature(int recId, ECDSASignature sig, byte[] message) {
+    public static BigInteger recoverFromSignature(int recId, ECDSASignature sig, byte[] message) {
         verifyPrecondition(recId >= 0, "recId must be positive");
         verifyPrecondition(sig.r.signum() >= 0, "r must be positive");
         verifyPrecondition(sig.s.signum() >= 0, "s must be positive");

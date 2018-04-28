@@ -121,7 +121,7 @@ Java 8:
    <dependency>
      <groupId>org.web3j</groupId>
      <artifactId>core</artifactId>
-     <version>3.2.0</version>
+     <version>3.3.1</version>
    </dependency>
 
 Android:
@@ -131,7 +131,7 @@ Android:
    <dependency>
      <groupId>org.web3j</groupId>
      <artifactId>core</artifactId>
-     <version>3.1.1-android</version>
+     <version>3.3.1-android</version>
    </dependency>
 
 Gradle
@@ -141,13 +141,13 @@ Java 8:
 
 .. code-block:: groovy
 
-   compile ('org.web3j:core:3.2.0')
+   compile ('org.web3j:core:3.3.1')
 
 Android:
 
 .. code-block:: groovy
 
-   compile ('org.web3j:core:3.1.1-android')
+   compile ('org.web3j:core:3.3.1-android')
 
 
 Start a client
@@ -170,7 +170,7 @@ Or use `Infura <https://infura.io/>`_, which provides **free clients** running i
 
 .. code-block:: java
 
-   Web3j web3 = Web3j.build(new InfuraHttpService("https://ropsten.infura.io/your-token"));
+   Web3j web3 = Web3j.build(new HttpService("https://ropsten.infura.io/your-token"));
 
 For further information refer to
 `Using Infura with web3j <https://web3j.github.io/web3j/infura.html>`_
@@ -516,6 +516,7 @@ Please submit a pull request if you wish to include your project on the list:
   `@matthiaszimmermann <https://github.com/matthiaszimmermann>`_
 - `Trust Ethereum Wallet <https://github.com/TrustWallet/trust-wallet-android>`_
 - `Presto Ethereum <https://github.com/xiaoyao1991/presto-ethereum>`_
+- `Kundera-Ethereum data importer and sync utility <https://github.com/impetus-opensource/Kundera/tree/trunk/src/kundera-ethereum>`_ by `@impetus-opensource <https://github.com/impetus-opensource>`_
 
 
 Companies using web3j
@@ -529,7 +530,9 @@ Please submit a pull request if you wish to include your company on the list:
 - `ConsenSys <https://consensys.net/>`_
 - `ING <https://www.ing.com>`_
 - `Othera <https://www.othera.io/>`_
+- `Pactum <https://pactum.io/>`_
 - `TrustWallet <http://trustwalletapp.com>`_
+- `Impetus <http://www.impetus.com/>`_
 
 
 Build instructions

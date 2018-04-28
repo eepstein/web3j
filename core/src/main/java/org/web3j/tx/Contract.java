@@ -5,9 +5,12 @@ import java.lang.reflect.Constructor;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.web3j.abi.EventEncoder;
 import org.web3j.abi.EventValues;
@@ -20,6 +23,7 @@ import org.web3j.abi.datatypes.Function;
 import org.web3j.abi.datatypes.Type;
 import org.web3j.crypto.Credentials;
 import org.web3j.protocol.Web3j;
+import org.web3j.protocol.core.DefaultBlockParameter;
 import org.web3j.protocol.core.DefaultBlockParameterName;
 import org.web3j.protocol.core.RemoteCall;
 import org.web3j.protocol.core.methods.request.Transaction;
@@ -46,6 +50,7 @@ public abstract class Contract extends ManagedTransaction {
     protected BigInteger gasLimit;
     protected TransactionReceipt transactionReceipt;
     protected Map<String, String> deployedAddresses;
+    protected DefaultBlockParameter defaultBlockParameter = DefaultBlockParameterName.LATEST;
 
     protected Contract(String contractBinary, String contractAddress,
                        Web3j web3j, TransactionManager transactionManager,
@@ -157,6 +162,16 @@ public abstract class Contract extends ManagedTransaction {
     }
 
     /**
+     * Sets the default block parameter. This use useful if one wants to query
+     * historical state of a contract.
+     *
+     * @param defaultBlockParameter the default block parameter
+     */
+    public void setDefaultBlockParameter(DefaultBlockParameter defaultBlockParameter) {
+        this.defaultBlockParameter = defaultBlockParameter;
+    }
+    
+    /**
      * Execute constant function call - i.e. a call that does not change state of the contract
      *
      * @param function to call
@@ -168,7 +183,7 @@ public abstract class Contract extends ManagedTransaction {
         org.web3j.protocol.core.methods.response.EthCall ethCall = web3j.ethCall(
                 Transaction.createEthCallTransaction(
                         transactionManager.getFromAddress(), contractAddress, encodedFunction),
-                DefaultBlockParameterName.LATEST)
+                defaultBlockParameter)
                 .send();
 
         String value = ethCall.getValue();
@@ -236,7 +251,18 @@ public abstract class Contract extends ManagedTransaction {
             String data, BigInteger weiValue)
             throws TransactionException, IOException {
 
-        return send(contractAddress, data, weiValue, gasPrice, gasLimit);
+        TransactionReceipt receipt = send(contractAddress, data, weiValue, gasPrice, gasLimit);
+
+        if (!receipt.isStatusOK()) {
+            throw new TransactionException(
+                    String.format(
+                            "Transaction has failed with status: %s. "
+                                    + "Gas used: %d. (not-enough gas?)",
+                            receipt.getStatus(),
+                            receipt.getGasUsed()));
+        }
+
+        return receipt;
     }
 
     protected <T extends Type> RemoteCall<T> executeRemoteCallSingleValueReturn(Function function) {
@@ -295,6 +321,8 @@ public abstract class Contract extends ManagedTransaction {
             T contract = constructor.newInstance(null, web3j, credentials, gasPrice, gasLimit);
 
             return create(contract, binary, encodedConstructor, value);
+        } catch (TransactionException e) {
+            throw e;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -318,12 +346,14 @@ public abstract class Contract extends ManagedTransaction {
             T contract = constructor.newInstance(
                     null, web3j, transactionManager, gasPrice, gasLimit);
             return create(contract, binary, encodedConstructor, value);
+        } catch (TransactionException e) {
+            throw e;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
 
-    protected static <T extends Contract> RemoteCall<T> deployRemoteCall(
+    public static <T extends Contract> RemoteCall<T> deployRemoteCall(
             Class<T> type,
             Web3j web3j, Credentials credentials,
             BigInteger gasPrice, BigInteger gasLimit,
@@ -333,7 +363,7 @@ public abstract class Contract extends ManagedTransaction {
                 encodedConstructor, value));
     }
 
-    protected static <T extends Contract> RemoteCall<T> deployRemoteCall(
+    public static <T extends Contract> RemoteCall<T> deployRemoteCall(
             Class<T> type,
             Web3j web3j, Credentials credentials,
             BigInteger gasPrice, BigInteger gasLimit,
@@ -343,7 +373,7 @@ public abstract class Contract extends ManagedTransaction {
                 binary, encodedConstructor, BigInteger.ZERO);
     }
 
-    protected static <T extends Contract> RemoteCall<T> deployRemoteCall(
+    public static <T extends Contract> RemoteCall<T> deployRemoteCall(
             Class<T> type,
             Web3j web3j, TransactionManager transactionManager,
             BigInteger gasPrice, BigInteger gasLimit,
@@ -353,7 +383,7 @@ public abstract class Contract extends ManagedTransaction {
                 encodedConstructor, value));
     }
 
-    protected static <T extends Contract> RemoteCall<T> deployRemoteCall(
+    public static <T extends Contract> RemoteCall<T> deployRemoteCall(
             Class<T> type,
             Web3j web3j, TransactionManager transactionManager,
             BigInteger gasPrice, BigInteger gasLimit,
@@ -391,17 +421,23 @@ public abstract class Contract extends ManagedTransaction {
 
     protected List<EventValues> extractEventParameters(
             Event event, TransactionReceipt transactionReceipt) {
+        return transactionReceipt.getLogs().stream()
+                .map(log -> extractEventParameters(event, log))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+    }
 
-        List<Log> logs = transactionReceipt.getLogs();
-        List<EventValues> values = new ArrayList<>();
-        for (Log log : logs) {
-            EventValues eventValues = extractEventParameters(event, log);
-            if (eventValues != null) {
-                values.add(eventValues);
-            }
-        }
+    protected EventValuesWithLog extractEventParametersWithLog(Event event, Log log) {
+        final EventValues eventValues = staticExtractEventParameters(event, log);
+        return (eventValues == null) ? null : new EventValuesWithLog(eventValues, log);
+    }
 
-        return values;
+    protected List<EventValuesWithLog> extractEventParametersWithLog(
+            Event event, TransactionReceipt transactionReceipt) {
+        return transactionReceipt.getLogs().stream()
+                .map(log -> extractEventParametersWithLog(event, log))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
     }
 
     /**
@@ -430,4 +466,38 @@ public abstract class Contract extends ManagedTransaction {
         return addr == null ? getStaticDeployedAddress(networkId) : addr;
     }
 
+    /**
+     * Adds a log field to {@link EventValues}.
+     */
+    public static class EventValuesWithLog {
+        private final EventValues eventValues;
+        private final Log log;
+
+        private EventValuesWithLog(EventValues eventValues, Log log) {
+            this.eventValues = eventValues;
+            this.log = log;
+        }
+
+        public List<Type> getIndexedValues() {
+            return eventValues.getIndexedValues();
+        }
+
+        public List<Type> getNonIndexedValues() {
+            return eventValues.getNonIndexedValues();
+        }
+
+        public Log getLog() {
+            return log;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    protected static <S extends Type, T> 
+            List<T> convertToNative(List<S> arr) {
+        List<T> out = new ArrayList<T>();
+        for (Iterator<S> it = arr.iterator(); it.hasNext(); ) {
+            out.add((T)it.next().getValue());
+        }
+        return out;
+    }
 }
